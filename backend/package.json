@@ -1,14 +1,27 @@
 {
-  "name": "flashcard-app-backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "express": "^4.18.2"
-  }
+    "name": "flashcard-app-backend",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "proto-gen-ts": "protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=outputEncodeMethods=false --ts_proto_opt=outputJsonMethods=false --ts_proto_opt=outputClientImpl=false --ts_proto_opt=outputServices=false --ts_proto_out=./src ./*.proto",
+        "dev": "nodemon --exec ts-node src/index.ts"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "connect-mongodb-session": "^3.1.1",
+        "express": "^4.18.2",
+        "express-session": "^1.17.3",
+        "install": "^0.13.0",
+        "mongoose": "^7.5.0",
+        "ts-proto": "^1.156.7"
+    },
+    "devDependencies": {
+        "@types/express": "^4.17.17",
+        "@types/express-session": "^1.17.7",
+        "@types/node": "^20.5.9",
+        "dotenv": "^16.3.1"
+    }
 }
