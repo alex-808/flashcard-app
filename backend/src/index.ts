@@ -1,26 +1,20 @@
 import express, { Express, Request, Response } from 'express';
-import mongoose from 'mongoose';
+import mongoose, { HydratedDocument, Schema } from 'mongoose';
 import dotenv from 'dotenv';
 import session from 'express-session';
-
+import checkUser from './middlewares/auth';
+import { IUser, userModel } from './models/User';
 dotenv.config();
 const app: Express = express();
-
 const MongoStore = require('connect-mongodb-session')(session);
 const store = new MongoStore({
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/test',
     databaseName: 'test',
     collection: 'sessions',
 });
-app.use(express.urlencoded({ extended: true }));
 
-const checkUser = (req: Request, res: Response, next: any) => {
-    if (req.session.user) {
-        next();
-    } else {
-        res.sendStatus(401);
-    }
-};
+// Middleware
+app.use(express.urlencoded({ extended: true }));
 app.use(
     session({
         resave: false,
@@ -40,72 +34,40 @@ async function main() {
 
 main().catch((err) => console.log(err));
 
-const userSchema = new mongoose.Schema(
-    {
-        username: String,
-        email: String,
-        password: String,
-        id: String,
-    },
-    { timestamps: true }
-);
-
-interface User {
+type SessionUser = {
+    id: Schema.Types.ObjectId;
     username: string;
     email: string;
-    password: string;
-    id?: string;
-    createdAt?: Date;
-    updatedAt?: Date;
-}
-
-const userModel = mongoose.model('User', userSchema);
-
+};
 declare module 'express-session' {
     interface SessionData {
         views: number;
-        user: User;
+        user: SessionUser;
     }
 }
 
-app.post('/register', async (req: Request<{}, {}, User>, res: Response) => {
+app.post('/register', async (req: Request, res: Response) => {
+    // TODO validate email
     const { username, email, password } = req.body;
     if (!username || !email || !password) {
         res.sendStatus(400);
         return;
     }
 
-    const existingUser = await userModel.findOne({
-        $or: [{ email: req.body.email }, { username: req.body.username }],
-    });
-    if (existingUser) {
-        const error =
-            existingUser.email === req.body.email
-                ? 'Email already exists'
-                : 'Username already exists';
-        return res.status(409).send({
-            error: error,
-        });
-    }
-
-    const registrationData: User = {
-        username: req.body.username,
-        email: req.body.email,
-        password: req.body.password,
-    };
-
-    const newUser = new userModel({
+    const newUser: HydratedDocument<IUser> = new userModel({
         username: username,
         email: email,
         password: password,
     });
-    // do we need to pull out an id here if we don't initiate a session?
-    const { _id } = await newUser.save();
 
-    if (!_id) return res.sendStatus(500);
+    try {
+        await newUser.save();
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+        return;
+    }
 
-    registrationData.id = _id.toString();
-    req.session.user = registrationData;
     res.sendStatus(200);
 });
 
@@ -115,23 +77,22 @@ app.post('/login', async (req: Request, res: Response) => {
         return;
     }
 
-    const user = await userModel.findOne({
+    const result = await userModel.findOne({
         $or: [{ email: req.body.email }, { username: req.body.username }],
     });
 
-    console.log(user);
+    const user = new userModel(result);
 
     if (!user) return res.sendStatus(401);
 
-    if (user.password !== req.body.password) return res.sendStatus(401);
+    if (user.comparePassword(req.body.password)) return res.sendStatus(401);
 
-    if (!user._id || !user.username || !user.email || !user.password)
-        return res.sendStatus(500);
-    const sessionUser: User = {
+    if (!user._id || !user.username || !user.email) return res.sendStatus(500);
+
+    const sessionUser: SessionUser = {
+        id: user._id,
         username: user.username,
         email: user.email,
-        password: user.password,
-        id: user._id.toString(),
     };
     // grants session
     req.session.user = sessionUser;
@@ -149,27 +110,20 @@ app.post('/logout', checkUser, (req: Request, res: Response) => {
 });
 
 app.get('/user:userId', checkUser, async (req: Request, res: Response) => {
+    // this functionality should be in the model
     const result = await userModel.findOne({ _id: req.params.userId });
     if (!result) return res.sendStatus(404);
 
-    if (
-        !result.username ||
-        !result.email ||
-        !result.createdAt ||
-        !result.updatedAt
-    )
-        return res.sendStatus(500);
-
-    // How do I define a User type when in some contexts it needs a password and in others it doesn't?
-    const user: User = {
+    const user = {
+        _id: result._id,
         username: result.username,
         email: result.email,
         createdAt: result.createdAt,
         updatedAt: result.updatedAt,
-        password: '',
     };
-    res.send(user);
+
     // userId, username, email, created_at, updated_at
+    res.send(user);
 });
 
 app.post('/user:userId/update', (req: Request, res: Response) => {});
@@ -194,3 +148,8 @@ app.post('/generate/deck', (req: Request, res: Response) => {
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
 });
+
+// Mongoose will enforce the structure of the document
+// on creation but not retrieval
+
+// I think we can assume that data retrieved from the database will conform to the schema defined in the model, therefore validation is not needed
