@@ -11,10 +11,10 @@ export interface IUser {
 }
 
 interface IUserMethods {
-    comparePassword: (password: string) => Promise<boolean>;
+    comparePassword(password: string): boolean;
 }
 
-type UserModel = Model<IUser, IUserMethods>;
+type UserModel = Model<IUser, {}, IUserMethods>;
 
 const schema = new Schema<IUser, UserModel, IUserMethods>({
     username: { type: String, required: true, unique: true },
@@ -22,17 +22,9 @@ const schema = new Schema<IUser, UserModel, IUserMethods>({
     password: { type: String, required: true },
 });
 
-schema.methods.comparePassword = async function (password: string) {
+schema.method('comparePassword', function comparePassword(password: string) {
+    console.log(this.password === password);
     return this.password === password;
-};
-
-export const userModel = model<IUser, UserModel>('User', schema);
-
-const user = new userModel({
-    username: 'test',
-    email: 'test@test.com',
-    password: 'test',
 });
 
-// Why is there no method comparePassword?
-user.comparePassword('test');
+export const userModel = model<IUser, UserModel>('User', schema);
