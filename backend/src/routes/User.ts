@@ -32,19 +32,13 @@ router.post('/register', async (req: Request, res: Response) => {
             return res.status(400).send('Username already exists');
         if (await userModel.isEmailTaken(email))
             return res.status(400).send('Email already exists');
-    } catch (err) {
-        console.error(err);
-        res.sendStatus(500);
-        return;
-    }
 
-    const newUser = new userModel({
-        username: username,
-        email: email,
-        password: password,
-    });
+        const newUser = new userModel({
+            username: username,
+            email: email,
+            password: password,
+        });
 
-    try {
         await newUser.save();
     } catch (err) {
         console.error(err);
@@ -153,29 +147,34 @@ router.post(
         const { userId } = req.params;
         const { username, email, password } = req.body;
 
-        const user = await userModel.findOne({ _id: userId });
-
-        if (!user) return res.sendStatus(404);
-
-        if (email) {
-            if (!validator.isEmail(email)) {
-                res.status(400).send('Invalid email');
-                return;
-            }
-            if (await userModel.isEmailTaken(email))
-                return res.status(400).send('Email already exists');
-            user.email = email;
-        }
-
-        if (username) {
-            if (await userModel.isUsernameTaken(username))
-                return res.status(400).send('Username already exists');
-            user.username = username;
-        }
-
-        if (password) user.password = password;
-
+        let user;
         try {
+            user = await userModel.findOne({ _id: userId });
+
+            if (!user) return res.sendStatus(404);
+
+            if (email) {
+                if (!validator.isEmail(email)) {
+                    res.status(400).send('Invalid email');
+                    return;
+                }
+                const emailIsTaken = await userModel.isEmailTaken(email);
+                if (emailIsTaken)
+                    return res.status(400).send('Email already exists');
+                user.email = email;
+            }
+
+            if (username) {
+                const usernameIsTaken = await userModel.isUsernameTaken(
+                    username
+                );
+                if (usernameIsTaken)
+                    return res.status(400).send('Username already exists');
+                user.username = username;
+            }
+
+            if (password) user.password = password;
+
             await user.save();
         } catch (err) {
             console.error(err);

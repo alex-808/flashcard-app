@@ -14,8 +14,8 @@ interface IUserMethods {
 }
 
 interface IUserStatics {
-    isUsernameTaken(username: string): boolean;
-    isEmailTaken(email: string): boolean;
+    isUsernameTaken(username: string): Promise<boolean>;
+    isEmailTaken(email: string): Promise<boolean>;
 }
 
 type UserModel = Model<IUser, {}, IUserMethods> & IUserStatics;
