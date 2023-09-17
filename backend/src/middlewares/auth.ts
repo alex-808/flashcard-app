@@ -1,10 +1,16 @@
 import { Request, Response } from 'express';
-const checkUser = (req: Request, res: Response, next: any) => {
-    if (req.session.user) {
+export const hasSession = (req: Request, res: Response, next: any) => {
+    if (req.session.sessionId) {
         next();
     } else {
         res.sendStatus(401);
     }
 };
 
-export default checkUser;
+export const isSameUser = (req: Request, res: Response, next: any) => {
+    if (req.session.sessionId!.toString() === req.params.userId) {
+        next();
+    } else {
+        res.sendStatus(401);
+    }
+};

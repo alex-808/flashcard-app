@@ -14,7 +14,12 @@ interface IUserMethods {
     comparePassword(password: string): boolean;
 }
 
-type UserModel = Model<IUser, {}, IUserMethods>;
+interface IUserStatics {
+    isUsernameTaken(username: string): boolean;
+    isEmailTaken(email: string): boolean;
+}
+
+type UserModel = Model<IUser, {}, IUserMethods> & IUserStatics;
 
 const schema = new Schema<IUser, UserModel, IUserMethods>({
     username: { type: String, required: true, unique: true },
@@ -23,8 +28,18 @@ const schema = new Schema<IUser, UserModel, IUserMethods>({
 });
 
 schema.method('comparePassword', function comparePassword(password: string) {
-    console.log(this.password === password);
     return this.password === password;
+});
+schema.static(
+    'isUsernameTaken',
+    async function isUsernameTaken(username: string) {
+        const user = await this.findOne({ username: username });
+        return user !== null;
+    }
+);
+schema.static('isEmailTaken', async function isEmailTaken(email: string) {
+    const user = await this.findOne({ email: email });
+    return user !== null;
 });
 
 export const userModel = model<IUser, UserModel>('User', schema);

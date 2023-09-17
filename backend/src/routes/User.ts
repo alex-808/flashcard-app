@@ -1,27 +1,40 @@
 import { Schema } from 'mongoose';
 import express, { Request, Response } from 'express';
-import checkUser from '../middlewares/auth';
+import { hasSession, isSameUser } from '../middlewares/auth';
 import { userModel } from '../models/User';
+import validator from 'validator';
 
 const router = express.Router();
 
-type SessionUser = {
-    id: Schema.Types.ObjectId;
-    username: string;
-    email: string;
-};
 declare module 'express-session' {
     interface SessionData {
-        views: number;
-        user: SessionUser;
+        sessionId: Schema.Types.ObjectId;
     }
 }
 
+// I'll need to add validations to limit the length of the username and password and enforce a certain password strength
+
 router.post('/register', async (req: Request, res: Response) => {
-    // TODO validate email
     const { username, email, password } = req.body;
+
     if (!username || !email || !password) {
-        res.sendStatus(400);
+        res.status(400).send('Username, email, and password required');
+        return;
+    }
+
+    if (!validator.isEmail(email)) {
+        res.status(400).send('Invalid email');
+        return;
+    }
+
+    try {
+        if (await userModel.isUsernameTaken(username))
+            return res.status(400).send('Username already exists');
+        if (await userModel.isEmailTaken(email))
+            return res.status(400).send('Email already exists');
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
         return;
     }
 
@@ -34,48 +47,49 @@ router.post('/register', async (req: Request, res: Response) => {
     try {
         await newUser.save();
     } catch (err) {
-        console.log(err);
+        console.error(err);
         res.sendStatus(500);
         return;
     }
-
     res.sendStatus(200);
 });
 
 router.post('/login', async (req: Request, res: Response) => {
+    if (req.session.sessionId) return res.status(200).send('Already logged in');
+
     const { username, email, password } = req.body;
 
     if (!(username || email) || !password) {
-        res.sendStatus(400);
+        res.status(400).send('Username/email and password required');
         return;
     }
 
-    const result = await userModel.findOne({
-        $or: [{ email: req.body.email }, { username: req.body.username }],
-    });
+    let result;
+    try {
+        const query = email ? { email: email } : { username: username };
+        result = await userModel.findOne(query);
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
+        return;
+    }
+    if (!result) return res.status(401).send('Invalid credentials');
 
-    // I was able to get rid of valiation here by fixing the typing of userModel
     const user = new userModel(result);
 
-    if (!user) return res.sendStatus(401);
+    if (!user.comparePassword(req.body.password))
+        return res.status(401).send('Invalid credentials');
 
-    // just successfully added a method to the schema
-    if (!user.comparePassword(req.body.password)) return res.sendStatus(401);
-
-    const sessionUser: SessionUser = {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-    };
     // grants session
-    req.session.user = sessionUser;
+    req.session.sessionId = user._id;
     res.sendStatus(200);
 });
 
-router.post('/logout', checkUser, (req: Request, res: Response) => {
+router.post('/logout', (req: Request, res: Response) => {
+    if (!req.session.sessionId) return res.status(401).send('Not logged in');
     req.session.destroy((err) => {
         if (err) {
-            console.log(err);
+            console.error(err);
             res.sendStatus(500);
             return;
         }
@@ -84,39 +98,92 @@ router.post('/logout', checkUser, (req: Request, res: Response) => {
     res.sendStatus(200);
 });
 
-router.param(
-    'userId',
-    (req: Request, res: Response, next: any, userId: string) => {
-        //TODO find user by id and create model
-        next();
+router.get('/:userId', hasSession, async (req: Request, res: Response) => {
+    let result;
+    try {
+        result = await userModel.findOne({ _id: req.params.userId });
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
+        return;
     }
-);
 
-router.get('/:userId', checkUser, async (req: Request, res: Response) => {
-    // this functionality should be in the model
-    const result = await userModel.findOne({ _id: req.params.userId });
     if (!result) return res.sendStatus(404);
+
+    result = result.toObject();
 
     const user = {
         _id: result._id,
         username: result.username,
-        email: result.email,
         createdAt: result.createdAt,
-        updatedAt: result.updatedAt,
     };
-
-    // userId, username, email, created_at, updated_at
     res.send(user);
 });
 
-router.post('/user:userId/update', (req: Request, res: Response) => {});
-router.post('/user:userId/delete', checkUser, (req: Request, res: Response) => {
-    // must be logged in
-    // must be that user
-    // if (req.params.userId === req.session.user.id) {
-    // console.log('delete user');
-    // }
-    // delete user;
-});
+router.post(
+    '/:userId/delete',
+    [hasSession, isSameUser],
+    async (req: Request, res: Response) => {
+        let result;
+        try {
+            result = await userModel.deleteOne({ _id: req.params.userId });
+        } catch (err) {
+            console.error(err);
+            res.sendStatus(500);
+            return;
+        }
+        if (result.deletedCount === 0) return res.sendStatus(404);
+
+        req.session.destroy((err) => {
+            if (err) {
+                console.error(err);
+                res.sendStatus(500);
+                return;
+            }
+        });
+        res.clearCookie('connect.sid');
+        res.sendStatus(200);
+    }
+);
+
+router.post(
+    '/:userId/update',
+    [hasSession, isSameUser],
+    async (req: Request, res: Response) => {
+        const { userId } = req.params;
+        const { username, email, password } = req.body;
+
+        const user = await userModel.findOne({ _id: userId });
+
+        if (!user) return res.sendStatus(404);
+
+        if (email) {
+            if (!validator.isEmail(email)) {
+                res.status(400).send('Invalid email');
+                return;
+            }
+            if (await userModel.isEmailTaken(email))
+                return res.status(400).send('Email already exists');
+            user.email = email;
+        }
+
+        if (username) {
+            if (await userModel.isUsernameTaken(username))
+                return res.status(400).send('Username already exists');
+            user.username = username;
+        }
+
+        if (password) user.password = password;
+
+        try {
+            await user.save();
+        } catch (err) {
+            console.error(err);
+            res.sendStatus(500);
+            return;
+        }
+        return res.sendStatus(200);
+    }
+);
 
 export default router;

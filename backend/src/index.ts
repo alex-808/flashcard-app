@@ -34,13 +34,16 @@ async function main() {
         process.env.MONGODB_URI || 'mongodb://localhost:27017/test'
     );
 }
-
-main().catch((err) => console.log(err));
+try {
+    main();
+} catch (err) {
+    console.error(err);
+}
 
 const port = 3000;
 
 app.listen(process.env.PORT || port, () => {
-    console.log(`Example app listening on port ${process.env.PORT || port}`);
+    console.log(`App listening on port ${process.env.PORT || port}`);
 });
 
 // Mongoose will enforce the structure of the document

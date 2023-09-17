@@ -17,12 +17,14 @@
         "install": "^0.13.0",
         "mongoose": "^7.5.0",
         "mongoose-unique-validator": "^4.0.0",
-        "ts-proto": "^1.156.7"
+        "ts-proto": "^1.156.7",
+        "validator": "^13.11.0"
     },
     "devDependencies": {
         "@types/express": "^4.17.17",
         "@types/express-session": "^1.17.7",
         "@types/node": "^20.5.9",
+        "@types/validator": "^13.11.1",
         "dotenv": "^16.3.1"
     }
 }
