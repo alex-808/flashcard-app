@@ -3,16 +3,16 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import session from 'express-session';
 import userRoutes from './routes/User';
-const MongoStore = require('connect-mongodb-session')(session);
+import mongoDbSession from 'connect-mongodb-session';
 
 // Configuration
 dotenv.config();
 const app: Express = express();
+const MongoStore = mongoDbSession(session);
 const store = new MongoStore({
-    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/test',
-    // convert to env variables
-    databaseName: 'test',
-    collection: 'sessions',
+    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017',
+    databaseName: process.env.DB_NAME || 'test',
+    collection: process.env.SESSION_COLLECTION || 'sessions',
 });
 
 // Middleware
@@ -29,6 +29,7 @@ app.use(
 // Routes
 app.use('/user', userRoutes);
 
+// Session Database
 async function main() {
     await mongoose.connect(
         process.env.MONGODB_URI || 'mongodb://localhost:27017/test'
@@ -45,10 +46,5 @@ const port = 3000;
 app.listen(process.env.PORT || port, () => {
     console.log(`App listening on port ${process.env.PORT || port}`);
 });
-
-// Mongoose will enforce the structure of the document
-// on creation but not retrieval
-
-// I think we can assume that data retrieved from the database will conform to the schema defined in the model, therefore validation is not needed
 
 export default app;

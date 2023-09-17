@@ -1,2 +1,2 @@
 // TODO
-// This is where global error handling should be done
+// This is where global error handling will be done

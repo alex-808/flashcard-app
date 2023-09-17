@@ -1,6 +1,5 @@
 import { model, Model, Schema } from 'mongoose';
 
-// This is the schema
 export interface IUser {
     username: string;
     email: string;
